@@ -1,0 +1,62 @@
+name: Update Playlist
+on:
+  push:
+    paths:
+      - 'magnets.txt'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate Playlist
+        run: |
+          echo "#EXTM3U" > playlist.m3u
+          
+          # PYTHON SCRIPT START
+          python3 -c "
+          import urllib.parse
+          
+          # WE USE YOUR PHONE IP HERE
+          SERVER_IP = '192.168.0.165'
+          PORT = '8090'
+          
+          try:
+              with open('magnets.txt', 'r') as f:
+                  lines = [line.strip() for line in f if line.strip()]
+          except FileNotFoundError:
+              lines = []
+
+          with open('playlist.m3u', 'a') as f:
+              for i, magnet in enumerate(lines):
+                  # Create a simple name
+                  name = f'Movie {i+1}'
+                  
+                  # Try to find real name inside magnet link
+                  if 'dn=' in magnet:
+                      try:
+                          parts = magnet.split('dn=')[1].split('&')[0]
+                          name = urllib.parse.unquote(parts).replace('+', ' ')
+                      except: pass
+                  
+                  # Prepare the link for the TV
+                  encoded_magnet = urllib.parse.quote(magnet)
+                  stream_url = f'http://{SERVER_IP}:{PORT}/stream?link={encoded_magnet}&play&save'
+                  
+                  f.write(f'#EXTINF:-1 group-title=\"Torrents\",{name}\n')
+                  f.write(f'{stream_url}\n')
+          "
+          # PYTHON SCRIPT END
+
+      - name: Save Changes
+        run: |
+          git config --global user.name "Auto-Bot"
+          git config --global user.email "bot@github.com"
+          git add playlist.m3u
+          git commit -m "Updated playlist" || echo "No changes to commit"
+          git push
+          
