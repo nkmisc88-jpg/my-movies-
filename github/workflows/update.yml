@@ -18,36 +18,42 @@ jobs:
       - name: Generate M3U
         run: |
           # --- CONFIGURATION ---
-          # Your Phone/Server IP
           SERVER="192.168.0.165"
           PORT="8090"
           # ---------------------
           
           echo "#EXTM3U" > playlist.m3u
           
-          # Read the text file line by line
+          # Read file line by line
           while IFS= read -r line || [ -n "$line" ]; do
               # Skip empty lines
               if [ -z "$line" ]; then continue; fi
               
-              # Check if the user put a "|" separator
-              if echo "$line" | grep -q "|"; then
-                  # Split by |
-                  # Everything BEFORE the | is the Title
+              # Count how many "|" symbols are in the line
+              pipe_count=$(echo "$line" | tr -cd '|' | wc -c)
+
+              if [ "$pipe_count" -ge 2 ]; then
+                  # FORMAT: Group | Title | Magnet
+                  GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
+                  TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
+                  MAGNET=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
+              elif [ "$pipe_count" -eq 1 ]; then
+                  # FORMAT: Title | Magnet (Old format)
+                  GROUP="Movies"
                   TITLE=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
-                  # Everything AFTER the | is the Magnet Link
                   MAGNET=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
               else
-                  # Fallback: If no name provided, use "Unknown Movie" or try to guess
-                  TITLE="Movie (No Title)"
+                  # Fallback
+                  GROUP="Movies"
+                  TITLE="Movie"
                   MAGNET="$line"
               fi
               
-              # URL Encode the magnet link so TiviMate can read it
+              # URL Encode the magnet link
               encoded=$(echo "$MAGNET" | sed 's/ /%20/g' | sed 's/:/%3A/g' | sed 's/\//%2F/g' | sed 's/?/%3F/g' | sed 's/&/%26/g' | sed 's/=/%3D/g')
               
-              # Write to the playlist file
-              echo "#EXTINF:-1 group-title=\"Torrents\",$TITLE" >> playlist.m3u
+              # Write to playlist with Group Title
+              echo "#EXTINF:-1 group-title=\"$GROUP\",$TITLE" >> playlist.m3u
               echo "http://$SERVER:$PORT/stream?link=$encoded&play&save" >> playlist.m3u
               
           done < magnets.txt
@@ -57,5 +63,5 @@ jobs:
           git config --global user.name "Auto-Bot"
           git config --global user.email "bot@github.com"
           git add playlist.m3u
-          git commit -m "Update playlist titles" || echo "No changes"
+          git commit -m "Update groups" || echo "No changes"
           git push
