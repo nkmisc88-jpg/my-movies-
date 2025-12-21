@@ -1,0 +1,47 @@
+name: Update Playlist
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'magnets.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate M3U
+        run: |
+          # Define your IP here
+          SERVER="192.168.0.165"
+          PORT="8090"
+          
+          # Start the file
+          echo "#EXTM3U" > playlist.m3u
+          
+          # Read magnets.txt line by line
+          while IFS= read -r line || [ -n "$line" ]; do
+              # Skip empty lines
+              if [ -z "$line" ]; then continue; fi
+              
+              # URL Encode the magnet link manually (simple version)
+              encoded=$(echo "$line" | sed 's/ /%20/g' | sed 's/:/%3A/g' | sed 's/\//%2F/g' | sed 's/?/%3F/g' | sed 's/&/%26/g' | sed 's/=/%3D/g')
+              
+              # Write to playlist
+              echo "#EXTINF:-1 group-title=\"Torrents\",Movie" >> playlist.m3u
+              echo "http://$SERVER:$PORT/stream?link=$encoded&play&save" >> playlist.m3u
+              
+          done < magnets.txt
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "Auto-Bot"
+          git config --global user.email "bot@github.com"
+          git add playlist.m3u
+          git commit -m "Update playlist" || echo "No changes to commit"
+          git push
