@@ -15,53 +15,63 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Generate M3U
+      - name: Generate Playlists
         run: |
           # --- CONFIGURATION ---
-          SERVER="192.168.0.146"
-          PORT="8090"
+          LOCAL_IP="192.168.0.109"     # Mi TV IP
+          BRIDGE_IP="100.85.xx.yy"     # Spare Phone Tailscale IP (Update if needed)
+          
+          LOCAL_PORT="8090"
+          BRIDGE_PORT="9090"
           # ---------------------
           
-          echo "#EXTM3U" > playlist.m3u
+          echo "#EXTM3U" > playlist-home.m3u
+          echo "#EXTM3U" > playlist-remote.m3u
           
           while IFS= read -r line || [ -n "$line" ]; do
-              # Skip empty lines
               if [ -z "$line" ]; then continue; fi
               
-              # Initialize variables
+              # Defaults
               GROUP="Movies"
               TITLE="Movie"
               LOGO=""
               MAGNET="$line"
+              INDEX=""  # Default is empty (plays first/largest file)
 
-              # Count the separators (|)
+              # Count columns
               pipe_count=$(echo "$line" | tr -cd '|' | wc -c)
 
-              if [ "$pipe_count" -ge 3 ]; then
-                  # FORMAT: Group | Title | Logo URL | Magnet
+              if [ "$pipe_count" -ge 4 ]; then
+                  # Group | Title | Logo | Magnet | Index
+                  GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
+                  TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
+                  LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
+                  MAGNET=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
+                  IDX=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
+                  if [ -n "$IDX" ]; then INDEX="&index=$IDX"; fi
+                  
+              elif [ "$pipe_count" -eq 3 ]; then
+                  # Group | Title | Logo | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
                   
               elif [ "$pipe_count" -eq 2 ]; then
-                  # FORMAT: Group | Title | Magnet (No Logo)
+                  # Group | Title | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
-                  
-              elif [ "$pipe_count" -eq 1 ]; then
-                  # FORMAT: Title | Magnet (No Group, No Logo)
-                  TITLE=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
-                  MAGNET=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
               fi
               
-              # URL Encode the magnet link
               encoded=$(echo "$MAGNET" | sed 's/ /%20/g' | sed 's/:/%3A/g' | sed 's/\//%2F/g' | sed 's/?/%3F/g' | sed 's/&/%26/g' | sed 's/=/%3D/g')
               
-              # Write to playlist with Logo
-              echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist.m3u
-              echo "http://$SERVER:$PORT/stream?link=$encoded&play&save" >> playlist.m3u
+              # Write entries
+              echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist-home.m3u
+              echo "http://$LOCAL_IP:$LOCAL_PORT/stream?link=$encoded&play&save$INDEX" >> playlist-home.m3u
+
+              echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist-remote.m3u
+              echo "http://$BRIDGE_IP:$BRIDGE_PORT/stream?link=$encoded&play&save$INDEX" >> playlist-remote.m3u
               
           done < magnets.txt
 
@@ -69,6 +79,6 @@ jobs:
         run: |
           git config --global user.name "Auto-Bot"
           git config --global user.email "bot@github.com"
-          git add playlist.m3u
-          git commit -m "Update logos" || echo "No changes"
+          git add playlist-home.m3u playlist-remote.m3u
+          git commit -m "Update with Index support" || echo "No changes"
           git push
