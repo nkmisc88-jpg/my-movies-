@@ -18,8 +18,8 @@ jobs:
       - name: Generate Playlists
         run: |
           # --- CONFIGURATION ---
-          LOCAL_IP="192.168.0.109"     # Mi TV IP
-          BRIDGE_IP="100.85.xx.yy"     # Spare Phone Tailscale IP (Update if needed)
+          LOCAL_IP="192.168.0.109"     # Your Mi TV or Spare Phone IP
+          BRIDGE_IP="100.85.xx.yy"     # Spare Phone Tailscale IP (If using Bridge)
           
           LOCAL_PORT="8090"
           BRIDGE_PORT="9090"
@@ -29,6 +29,9 @@ jobs:
           echo "#EXTM3U" > playlist-remote.m3u
           
           while IFS= read -r line || [ -n "$line" ]; do
+              # Clean invisible Windows characters (The Fix!)
+              line=$(echo "$line" | tr -d '\r')
+              
               if [ -z "$line" ]; then continue; fi
               
               # Defaults
@@ -36,7 +39,7 @@ jobs:
               TITLE="Movie"
               LOGO=""
               MAGNET="$line"
-              INDEX=""  # Default is empty (plays first/largest file)
+              INDEX=""
 
               # Count columns
               pipe_count=$(echo "$line" | tr -cd '|' | wc -c)
@@ -47,18 +50,18 @@ jobs:
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
-                  IDX=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
+                  
+                  # Clean the Index specifically
+                  IDX=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//' | tr -d '\r')
                   if [ -n "$IDX" ]; then INDEX="&index=$IDX"; fi
                   
               elif [ "$pipe_count" -eq 3 ]; then
-                  # Group | Title | Logo | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
                   
               elif [ "$pipe_count" -eq 2 ]; then
-                  # Group | Title | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
@@ -66,7 +69,6 @@ jobs:
               
               encoded=$(echo "$MAGNET" | sed 's/ /%20/g' | sed 's/:/%3A/g' | sed 's/\//%2F/g' | sed 's/?/%3F/g' | sed 's/&/%26/g' | sed 's/=/%3D/g')
               
-              # Write entries
               echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist-home.m3u
               echo "http://$LOCAL_IP:$LOCAL_PORT/stream?link=$encoded&play&save$INDEX" >> playlist-home.m3u
 
@@ -80,5 +82,5 @@ jobs:
           git config --global user.name "Auto-Bot"
           git config --global user.email "bot@github.com"
           git add playlist-home.m3u playlist-remote.m3u
-          git commit -m "Update with Index support" || echo "No changes"
+          git commit -m "Fix Index Error" || echo "No changes"
           git push
