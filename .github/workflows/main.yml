@@ -18,7 +18,7 @@ jobs:
       - name: Generate M3U
         run: |
           # --- CONFIGURATION ---
-          SERVER="192.168.0.109"
+          SERVER="192.168.0.146"
           PORT="8090"
           # ---------------------
           
