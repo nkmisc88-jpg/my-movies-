@@ -6,7 +6,6 @@ on:
     paths:
       - 'magnets.txt'
       - 'movies.txt'
-      - 'ip.txt' # Added this so it updates if you add a new IP
 
 permissions:
   contents: write
@@ -19,15 +18,20 @@ jobs:
 
       - name: Generate M3U
         run: |
+          # --- CONFIGURATION ---
+          # We use localhost so the playlist is universal
+          DOMAIN="localhost:8090"
+          # ---------------------
+          
           # Ensure inputs exist
-          touch magnets.txt movies.txt ip.txt
+          touch magnets.txt movies.txt
           
           echo "#EXTM3U" > playlist.m3u
           
-          # 1. Loop through every Movie/Magnet
+          # Loop through every Movie/Magnet from both files
           cat magnets.txt movies.txt | while IFS= read -r line || [ -n "$line" ]; do
               
-              # Clean line endings
+              # 1. Clean invisible "Windows" errors
               line=$(echo "$line" | tr -d '\r')
               if [ -z "$line" ]; then continue; fi
               
@@ -71,22 +75,13 @@ jobs:
                    MAGNET="$line"
               fi
 
-              # URL Encode the magnet link
+              # 2. URL Encode the magnet link
               encoded=$(echo "$MAGNET" | sed 's/ /%20/g; s/:/%3A/g; s/\//%2F/g; s/?/%3F/g; s/&/%26/g; s/=/%3D/g; s/\[/%5B/g; s/\]/%5D/g')
 
-              # 2. INNER LOOP: Generate a link for EACH IP address
-              while IFS= read -r server_ip || [ -n "$server_ip" ]; do
-                  # Clean IP line
-                  server_ip=$(echo "$server_ip" | tr -d '\r')
-                  if [ -z "$server_ip" ]; then continue; fi
-
-                  # Write entry to playlist
-                  # We append the IP to the Title so you know which is which (Optional, but helpful)
-                  echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE ($server_ip)" >> playlist.m3u
-                  echo "http://$server_ip/stream?link=$encoded&play$INDEX_PARAM" >> playlist.m3u
-                  
-              done < ip.txt
-
+              # 3. Write Single Entry (Using localhost)
+              echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist.m3u
+              echo "http://$DOMAIN/stream?link=$encoded&play$INDEX_PARAM" >> playlist.m3u
+              
           done
 
       - name: Commit and Push
@@ -94,5 +89,5 @@ jobs:
           git config --global user.name "Auto-Bot"
           git config --global user.email "bot@github.com"
           git add playlist.m3u
-          git commit -m "Update Playlist with Multiple IPs" || echo "No changes"
+          git commit -m "Update Playlist" || echo "No changes"
           git push
