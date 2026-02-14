@@ -6,6 +6,7 @@ on:
     paths:
       - 'magnets.txt'
       - 'movies.txt'
+      - 'ip.txt'
 
 permissions:
   contents: write
@@ -18,35 +19,35 @@ jobs:
 
       - name: Generate M3U
         run: |
-          # --- CONFIGURATION ---
-          # We use localhost so the playlist is universal
-          DOMAIN="localhost:8090"
-          # ---------------------
+          # Read the IP from the first line of ip.txt
+          # If file is missing, default to a placeholder
+          if [ -f "ip.txt" ]; then
+              SERVER_ADDR=$(head -n 1 ip.txt | tr -d '\r')
+          else
+              SERVER_ADDR="192.168.1.5:8090"
+          fi
           
-          # Ensure inputs exist
-          touch magnets.txt movies.txt
+          echo "Using Server IP: $SERVER_ADDR"
           
           echo "#EXTM3U" > playlist.m3u
           
-          # Loop through every Movie/Magnet from both files
+          # Process both files
           cat magnets.txt movies.txt | while IFS= read -r line || [ -n "$line" ]; do
               
-              # 1. Clean invisible "Windows" errors
               line=$(echo "$line" | tr -d '\r')
               if [ -z "$line" ]; then continue; fi
               
-              # Initialize variables
+              # Defaults
               GROUP="Movies"
               TITLE="Movie"
               LOGO=""
               MAGNET=""
               INDEX_PARAM=""
               
-              # --- PARSING LOGIC ---
+              # Parsing Logic
               pipe_count=$(echo "$line" | tr -cd '|' | wc -c)
 
               if [ "$pipe_count" -ge 4 ]; then
-                  # Group | Title | Logo | Magnet | Index
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
@@ -55,32 +56,29 @@ jobs:
                   if [ -n "$IDX" ]; then INDEX_PARAM="&index=$IDX"; fi
                   
               elif [ "$pipe_count" -ge 3 ]; then
-                  # Group | Title | Logo | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   LOGO=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
                   
               elif [ "$pipe_count" -eq 2 ]; then
-                  # Group | Title | Magnet
                   GROUP=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   TITLE=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
                   
               elif [ "$pipe_count" -eq 1 ]; then
-                  # Title | Magnet
                   TITLE=$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')
                   MAGNET=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
               else
                    MAGNET="$line"
               fi
 
-              # 2. URL Encode the magnet link
+              # URL Encode
               encoded=$(echo "$MAGNET" | sed 's/ /%20/g; s/:/%3A/g; s/\//%2F/g; s/?/%3F/g; s/&/%26/g; s/=/%3D/g; s/\[/%5B/g; s/\]/%5D/g')
 
-              # 3. Write Single Entry (Using localhost)
+              # Write Entry with the Phone's IP
               echo "#EXTINF:-1 tvg-logo=\"$LOGO\" group-title=\"$GROUP\",$TITLE" >> playlist.m3u
-              echo "http://$DOMAIN/stream?link=$encoded&play$INDEX_PARAM" >> playlist.m3u
+              echo "http://$SERVER_ADDR/stream?link=$encoded&play$INDEX_PARAM" >> playlist.m3u
               
           done
 
@@ -89,5 +87,5 @@ jobs:
           git config --global user.name "Auto-Bot"
           git config --global user.email "bot@github.com"
           git add playlist.m3u
-          git commit -m "Update Playlist" || echo "No changes"
+          git commit -m "Update Playlist with IP from ip.txt" || echo "No changes"
           git push
