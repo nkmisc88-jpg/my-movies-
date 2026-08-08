@@ -3,7 +3,7 @@ import re
 from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
-TARGET_URL = "https://www.1tamilmv.earth/"
+TARGET_URL = "https://www.1tamilmv.fi/"
 OUTPUT_FILE = "movies.txt"
 # ---------------------
 
