@@ -39,7 +39,6 @@ def scrape_movies():
             print(f"Error loading homepage: {e}")
             browser.close(); return
 
-        # FIX: The command is .all(), NOT .all_links()
         # We grab all links that look like a forum topic
         all_link_elements = page.locator('a[href*="topic"]').all()
         
@@ -74,7 +73,7 @@ def scrape_movies():
                 magnet_el = page.locator('a[href^="magnet:?"]').first
                 if magnet_el.count() > 0:
                     magnet_link = magnet_el.get_attribute("href")
-                    
+                        
                     # 3. Get Image
                     image_url = "No Image"
                     post_content = page.locator('div[data-role="commentContent"]').first
@@ -85,11 +84,11 @@ def scrape_movies():
                     # 4. Format Data
                     group = get_language_group(raw_title)
                     name = clean_movie_name(raw_title)
-                    
+                        
                     entry = f"{group} | {name} | {image_url} | {magnet_link}"
                     new_entries.append(entry)
                     print(f"  -> Found: {name}")
-                    
+                        
             except Exception as e:
                 print(f"  -> Skipped due to error: {e}")
                 continue
@@ -98,25 +97,37 @@ def scrape_movies():
         update_output_file(new_entries)
 
 def update_output_file(new_entries):
-    # Read existing file to avoid duplicates
+    existing_lines = []
     existing_magnets = set()
+
+    # 1. Read existing file and remember old lines and magnets
     if os.path.exists(OUTPUT_FILE):
         with open(OUTPUT_FILE, 'r') as f:
-            for line in f:
+            existing_lines = f.readlines()
+            for line in existing_lines:
                 parts = line.split("|")
                 if len(parts) >= 4:
                     existing_magnets.add(parts[-1].strip())
 
-    count = 0
-    with open(OUTPUT_FILE, 'a') as f:
-        for entry in new_entries:
-            magnet = entry.split("|")[-1].strip()
-            # Only add if magnet is NOT in file
-            if magnet not in existing_magnets:
-                f.write(entry + "\n")
-                count += 1
-    
-    print(f"Successfully added {count} new movies.")
+    # 2. Collect only the brand new entries
+    valid_new_entries = []
+    for entry in new_entries:
+        magnet = entry.split("|")[-1].strip()
+        # Only add if magnet is NOT in the old list
+        if magnet not in existing_magnets:
+            valid_new_entries.append(entry + "\n")
+            # Add to set to prevent duplicates within the new batch itself
+            existing_magnets.add(magnet)
+
+    count = len(valid_new_entries)
+
+    # 3. Write them back: NEW entries at the top, OLD entries at the bottom
+    if count > 0:
+        with open(OUTPUT_FILE, 'w') as f:
+            f.writelines(valid_new_entries)
+            f.writelines(existing_lines)
+            
+    print(f"Successfully added {count} new movies at the top of the file.")
 
 if __name__ == "__main__":
     scrape_movies()
